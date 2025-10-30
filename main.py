@@ -1,136 +1,105 @@
 from socket import *
 import sys
-import os
-
 
 if len(sys.argv) <= 1:
-    print('Usage : "python ProxyServer.py server_ip"\n[server_ip : It is the IP Address Of Proxy Server]')
+    print('Usage : "python ProxyServer.py server_ip"\n[server_ip : It is the IP Address Of Proxy Server')
     sys.exit(2)
 
-server_ip = sys.argv[1]
-server_port = 8888   
-
+# Create a server socket, bind it to a port and start listening
 tcpSerSock = socket(AF_INET, SOCK_STREAM)
-tcpSerSock.bind((server_ip, server_port))
-tcpSerSock.listen(5)
-print(f"Proxy Server running on {server_ip}:{server_port}\n")
 
-while True:
+# Fill in start.
+tcpSerSock.bind((sys.argv[1], 8888))
+tcpSerSock.listen(5)
+# Fill in end.
+
+while 1:
+    # Start receiving data from the client
     print('Ready to serve...')
     tcpCliSock, addr = tcpSerSock.accept()
     print('Received a connection from:', addr)
-
+    
+    # Fill in start.
+    message = tcpCliSock.recv(4096).decode()
+    # Fill in end.
+    # print(message)
+    
+    # Extract the filename from the given message
+    print(message.split()[1])
+    filename = message.split()[1].partition("/")[2]
+    # print(filename)
+    fileExist = "false"
+    filetouse = "/" + filename
+    # print(filetouse)
+    
     try:
-        # Receive client request
-        message = tcpCliSock.recv(4096).decode()
-        if not message:
-            tcpCliSock.close()
-            continue
-
-        print(f"\n----- Client Request -----\n{message}\n---------------------------")
-
-        # Extract method and filename
-        request_parts = message.split()
-        if len(request_parts) < 2:
-            tcpCliSock.close()
-            continue
-
-        method = request_parts[0]  # request type
-        full_url = request_parts[1]  # e.g., "http://www.google.com/index.html" or "/www.google.com/index.html"
+        # Check whether the file exist in the cache
+        f = open(filetouse[1:], "r")
+        outputdata = f.readlines()
+        fileExist = "true"
         
-        # Remove http:// prefix if present
-        if full_url.startswith("http://"):
-            full_url = full_url[7:]
-        elif full_url.startswith("/"):
-            full_url = full_url[1:]
+        # ProxyServer finds a cache hit and generates a response message
+        tcpCliSock.send("HTTP/1.0 200 OK\r\n".encode())
+        tcpCliSock.send("Content-Type:text/html\r\n".encode())
         
-        filename = full_url  # e.g., "www.google.com/index.html"
-        fileExist = False
-        
-        # Create a safe cache filename
-        file_to_use = filename.replace("/", "_").replace(":", "_")
-        if not file_to_use:
-            file_to_use = "index_cache"
-
-
-        if os.path.isfile(file_to_use):
-            print("Cache hit. Serving from cache...")
-            fileExist = True
-            with open(file_to_use, "rb") as f:
-                cached_data = f.read()
-
-            # Send cached response
-            tcpCliSock.send(b"HTTP/1.0 200 OK\r\n")
-            tcpCliSock.send(b"Content-Type: text/html\r\n\r\n")
-            tcpCliSock.send(cached_data)
-            print("Served from cache.\n")
-
-        # ----------------------------
-        # 5. Cache miss → fetch from server
-        # ----------------------------
-        else:
-            print("Cache miss. Fetching from remote server...")
-
-            # Extract hostname and path correctly
-            url_parts = filename.split("/", 1)
-            hostn = url_parts[0]               # e.g., "www.google.com"
-            path = "/" + url_parts[1] if len(url_parts) > 1 else "/"  # e.g., "/index.html"
-
-            print(f"Connecting to host: {hostn}, path: {path}")
-
-
+        # Fill in start.
+        for line in outputdata:
+            tcpCliSock.send(line.encode())
+        # Fill in end.
+        print('Read from cache')
+    
+    # Error handling for file not found in cache
+    except IOError:
+        if fileExist == "false":
+            # Create a socket on the proxyserver
+            # Fill in start.
+            c = socket(AF_INET, SOCK_STREAM)
+            # Fill in end.
+            
+            hostn = filename.replace("www.", "", 1)
+            print(hostn)
+            
             try:
-                # Create connection to remote web server
-                c = socket(AF_INET, SOCK_STREAM)
+                # Connect to the socket to port 80
+                # Fill in start.
                 c.connect((hostn, 80))
-
-                # Handle GET or POST request
-                if method == "GET":
-                    request_line = f"GET {path} HTTP/1.0\r\nHost: {hostn}\r\n\r\n"
-                    c.sendall(request_line.encode())
-
-                elif method == "POST":
-                    # Extract POST body (if any)
-                    headers, _, body = message.partition("\r\n\r\n")
-                    request_line = f"POST {path} HTTP/1.0\r\nHost: {hostn}\r\n"
-                    c.sendall((request_line + headers + "\r\n\r\n" + body).encode())
-
-                response = b""
-                while True:
-                    data = c.recv(4096)
-                    if not data:
-                        break
-                    response += data
-
-                # Send response back to client
-                tcpCliSock.sendall(response)
-                print(f"Sent {len(response)} bytes to client")
-
-                # Cache only GET responses
-                if method == "GET" and response:
-                    # Split response to check status code
-                    try:
-                        response_str = response.decode('utf-8', errors='ignore')
-                        if '200 OK' in response_str.split('\r\n')[0]:
-                            with open(file_to_use, "wb") as tmpFile:
-                                tmpFile.write(response)
-                            print(f"Response cached as: {file_to_use}\n")
-                        else:
-                            print("Not caching non-200 response\n")
-                    except:
-                        print("Could not cache response\n")
-
-                c.close()
-
+                # Fill in end.
+                
+                # Create a temporary file on this socket and ask port 80
+                # for the file requested by the client
+                fileobj = c.makefile('rwb', 0)
+                request = "GET " + "http://" + filename + " HTTP/1.0\r\nHost: " + hostn + "\r\n\r\n"
+                fileobj.write(request.encode())
+                
+                # Read the response into buffer
+                # Fill in start.
+                buffer = fileobj.readlines()
+                # Fill in end.
+                
+                # Create a new file in the cache for the requested file.
+                # Also send the response in the buffer to client socket
+                # and the corresponding file in the cache
+                tmpFile = open("./" + filename, "wb")
+                
+                # Fill in start.
+                for line in buffer:
+                    tmpFile.write(line)
+                    tcpCliSock.send(line)
+                tmpFile.close()
+                # Fill in end.
+                
             except Exception as e:
-                print(f"Error fetching from server: {e}")
-                error_response = b"HTTP/1.0 502 Bad Gateway\r\n"
-                error_response += b"Content-Type: text/html\r\n\r\n"
-                error_response += b"<html><body><h1>502 Bad Gateway</h1>"
-                error_response += f"<p>Error: {str(e)}</p></body></html>".encode()
-                tcpCliSock.sendall(error_response)
-
-    except Exception as e:
-        print("Error processing client request:", e)
-
+                print("Illegal request:", str(e))
+        else:
+            # HTTP response message for file not found
+            # Fill in start.
+            tcpCliSock.send("HTTP/1.0 404 Not Found\r\n".encode())
+            tcpCliSock.send("Content-Type:text/html\r\n\r\n".encode())
+            tcpCliSock.send("<html><body><h1>404 Not Found</h1></body></html>".encode())
+            # Fill in end.
+    
+    # Close the client and the server sockets
     tcpCliSock.close()
+
+# Fill in start.
+# Fill in end.
